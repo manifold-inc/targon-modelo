@@ -5,7 +5,7 @@ service cron start
 
 # Ensure that cron is running
 if service cron status; then
-    echo "Cron service started successfully."
+    echo "Modelo cron service started successfully."
 else
     echo "Failed to start cron service."
     exit 1
