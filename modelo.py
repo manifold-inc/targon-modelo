@@ -69,7 +69,7 @@ def calculate_and_insert_daily_stats():
             # Insert the calculated stats into the historical stats table
             insert_query = """
             INSERT INTO daily_model_token_counts
-            (date, model_name, total_tokens)
+            (created_at, model_name, total_tokens)
             VALUES (%s, %s, %s)
             """
             for result in results:
