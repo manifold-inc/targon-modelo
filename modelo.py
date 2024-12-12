@@ -48,7 +48,7 @@ def calculate_and_insert_daily_stats():
             query = """
             SELECT 
                 model_name,
-                SUM(tokens) AS total_tokens,
+                SUM(response_tokens) AS total_tokens,
                 DATE(created_at) AS date
             FROM 
                 request
