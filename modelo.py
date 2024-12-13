@@ -3,7 +3,6 @@ import os
 import requests
 import traceback
 
-
 pymysql.install_as_MySQLdb()
 
 db = pymysql.connect(
@@ -44,17 +43,20 @@ def sendErrorToEndon(error: Exception, error_traceback: str, endpoint: str) -> N
 def calculate_and_insert_daily_stats():
     try:
         with db.cursor() as cursor:
-            # Calculate daily averages and total tokens
+            # Calculate daily totals and average TPS
             query = """
             SELECT 
                 model_name,
                 SUM(response_tokens) AS total_tokens,
-                DATE(created_at) AS date
+                DATE(created_at) AS date,
+                AVG(response_tokens / (total_time / 1000)) as avg_tps
             FROM 
                 request
             WHERE 
                 created_at >= CURDATE() - INTERVAL 1 Day
                 AND created_at < CURDATE()
+                AND total_time > 0
+                AND response_tokens > 0
             GROUP BY 
                 model_name,
                 DATE(created_at)
@@ -66,15 +68,15 @@ def calculate_and_insert_daily_stats():
                 print("No data found for yesterday")
                 return False
 
-            # Insert the calculated stats into the historical stats table
+            # Insert the calculated stats including avg_tps
             insert_query = """
             INSERT INTO daily_model_token_counts
-            (created_at, model_name, total_tokens)
-            VALUES (%s, %s, %s)
+            (created_at, model_name, total_tokens, avg_tps)
+            VALUES (%s, %s, %s, %s)
             """
             for result in results:
                 cursor.execute(insert_query, result)
-                print(f"Inserted daily stats for {result[0]} on {result[2]}")
+                print(f"Inserted daily stats for {result[0]} on {result[2]} with avg TPS: {result[3]:.2f}")
             return True
 
     except (pymysql.Error, Exception) as e:
@@ -87,10 +89,50 @@ def calculate_and_insert_daily_stats():
         )
         return False
 
+def update_historical_tps():
+    with db.cursor() as cursor:
+        # Get all unique dates and models
+        get_dates_query = """
+        SELECT DISTINCT created_at, model_name 
+        FROM daily_model_token_counts
+        WHERE 
+            created_at >= '2024-12-12'
+            AND created_at <= CURDATE()
+        ORDER BY created_at
+        """
+        cursor.execute(get_dates_query)
+        dates_and_models = cursor.fetchall()
+
+        # Update each date/model combination
+        update_query = """
+        UPDATE daily_model_token_counts 
+        SET avg_tps = (
+            SELECT COALESCE(AVG(response_tokens / (total_time / 1000)), 0)
+            FROM request
+            WHERE 
+                DATE(created_at) = DATE(%s)
+                AND model_name = %s
+                AND total_time > 0
+                AND response_tokens > 0
+        )
+        WHERE DATE(created_at) = DATE(%s)
+        AND model_name = %s
+        """
+
+        total_updates = len(dates_and_models)
+        for i, (date, model) in enumerate(dates_and_models, 1):
+            cursor.execute(update_query, (date, model, date, model))
+            print(f"[{i}/{total_updates}] Processing {model} for {date}")
+
+        print("Historical TPS values update completed!")
 
 if __name__ == "__main__":
     try:
-        calculate_and_insert_daily_stats()
+        # Calculate yesterday's stats
+        if calculate_and_insert_daily_stats():
+            print("Daily stats calculation completed successfully")
+        else:
+            print("Daily stats calculation failed")
     finally:
         db.close()
 
