@@ -46,9 +46,9 @@ def calculate_and_insert_daily_stats():
             # Calculate daily totals and average TPS
             query = """
             SELECT 
+                DATE(created_at) AS date,
                 model_name,
                 SUM(response_tokens) AS total_tokens,
-                DATE(created_at) AS date,
                 AVG(response_tokens / (total_time / 1000)) as avg_tps
             FROM 
                 request
@@ -58,8 +58,8 @@ def calculate_and_insert_daily_stats():
                 AND total_time > 0
                 AND response_tokens > 0
             GROUP BY 
-                model_name,
-                DATE(created_at)
+                DATE(created_at),
+                model_name
             """
             cursor.execute(query)
             results = cursor.fetchall()
@@ -76,7 +76,7 @@ def calculate_and_insert_daily_stats():
             """
             for result in results:
                 cursor.execute(insert_query, result)
-                print(f"Inserted daily stats for {result[0]} on {result[2]} with avg TPS: {result[3]:.2f}")
+                print(f"Inserted daily stats for {result[1]} on {result[0]} with avg TPS: {result[3]:.2f}")
             return True
 
     except (pymysql.Error, Exception) as e:
